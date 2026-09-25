@@ -1,4 +1,6 @@
 use crate::error::AppError;
+use crate::config::Config;
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all ="lowercase")]
 
@@ -91,6 +93,51 @@ pub fn parse_error(status: u16, body: &str) -> AppError{
         .unwrap_or_else(|| body.to_string());
 
     AppError::Api{ status, message }
+}
+
+//define data
+pub struct GeminiClient{
+    http: reqwest::Client,
+    api_key: String,
+    model: String,
+}
+
+//strucutre's method detail
+impl GeminiClient{
+    pub fn new(config: Config) -> Result<Self, AppError>{
+        Ok(GeminiClient{
+            http: reqwest::Client::new(),
+            api_key: config.api_key,
+            model: config.model,
+    })
+}
+
+    pub async fn generate(&self, history: &[Content]) -> Result<Reply, AppError>{
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+            self.model
+        );
+        
+        let request_body = GenerateRequest{contents: history};
+        let reponse = self
+        .http
+        .post(&url)
+        .header("x-goog-api-key", &self.api_key)
+        .json(&request_body)
+        .send() //return future task
+        .await?; //async 
+        
+        let status = reponse.status().as_u16();
+        let body = reponse.text().await?;
+
+        if status == 200{
+            parse_success(&body)
+        }else{
+            Err(parse_error(status,&body))
+        }
+        
+}
+
 }
 
 #[cfg(test)]
